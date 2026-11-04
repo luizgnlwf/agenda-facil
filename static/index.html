@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agenda Fácil</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Agenda Fácil</h1>
+    <nav id="nav" hidden><span id="saudacao"></span> <button id="sair">Sair</button></nav>
+  </header>
+  <main>
+    <div id="msg" role="status"></div>
+
+    <section id="auth">
+      <h2 id="auth-titulo">Entrar</h2>
+      <form id="form-auth">
+        <label class="so-cadastro">Nome <input id="nome"></label>
+        <label>E-mail <input id="email" type="email"></label>
+        <label class="so-cadastro">Telefone <input id="telefone"></label>
+        <label>Senha <input id="senha" type="password"></label>
+        <button type="submit">Continuar</button>
+      </form>
+      <p><a href="#" id="alternar">Não tem conta? Cadastre-se</a></p>
+    </section>
+
+    <section id="app" hidden>
+      <h2>Novo agendamento</h2>
+      <label>Serviço <select id="servico"></select></label>
+      <label>Data <input id="data" type="date"></label>
+      <div id="horarios"></div>
+      <button id="agendar">Confirmar agendamento</button>
+      <h2>Meus agendamentos</h2>
+      <ul id="lista"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

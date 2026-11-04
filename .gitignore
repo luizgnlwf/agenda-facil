@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+agenda.db
+.pytest_cache/
+agendamento.zip
