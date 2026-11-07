@@ -1,13 +1,19 @@
 """Controller (MVC): rotas da API e validações. Execute com: python app.py"""
 import re
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from flask import Flask, g, jsonify, request, session
 
 import models
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+TELEFONE = re.compile(r"^\d{10,11}$")
+FUSO = timezone(timedelta(hours=-3))  # horário de Brasília
+
+
+def agora():
+    return datetime.now(FUSO)
 
 
 def create_app(db_path="agenda.db"):
@@ -35,8 +41,21 @@ def create_app(db_path="agenda.db"):
             d = date.fromisoformat(texto or "")
         except ValueError:
             return None, "Data inválida."
-        if d < date.today():
+        if d < agora().date():
             return None, "Não é possível agendar em data passada."
+        return d, None
+
+    def passou(d, hora):
+        return d == agora().date() and hora <= agora().strftime("%H:%M")
+
+    def validar_slot(data_txt, hora):
+        d, msg = data_valida(data_txt)
+        if msg:
+            return None, msg
+        if hora not in models.HORARIOS:
+            return None, "Horário inválido."
+        if passou(d, hora):
+            return None, "Esse horário já passou."
         return d, None
 
     @app.get("/")
@@ -48,15 +67,18 @@ def create_app(db_path="agenda.db"):
         d = request.get_json(silent=True) or {}
         nome = (d.get("nome") or "").strip()
         email = (d.get("email") or "").strip().lower()
+        telefone = (d.get("telefone") or "").strip()
         senha = d.get("senha") or ""
         if not nome:
             return erro("Informe o nome.")
         if not EMAIL.match(email):
             return erro("E-mail inválido.")
+        if telefone and not TELEFONE.match(telefone):
+            return erro("Telefone deve ter 10 ou 11 números (com DDD), sem letras ou símbolos.")
         if len(senha) < 6:
             return erro("A senha deve ter ao menos 6 caracteres.")
         try:
-            uid = models.criar_usuario(db(), nome, email, (d.get("telefone") or "").strip(), senha)
+            uid = models.criar_usuario(db(), nome, email, telefone, senha)
         except sqlite3.IntegrityError:
             return erro("E-mail já cadastrado.", 409)
         session["uid"] = uid
@@ -91,7 +113,11 @@ def create_app(db_path="agenda.db"):
         if msg:
             return erro(msg)
         ocupadas = models.horas_ocupadas(db(), d.isoformat())
-        return jsonify([{"hora": h, "livre": h not in ocupadas} for h in models.HORARIOS])
+        saida = []
+        for h in models.HORARIOS:
+            motivo = "ocupado" if h in ocupadas else "passou" if passou(d, h) else None
+            saida.append({"hora": h, "livre": motivo is None, "motivo": motivo})
+        return jsonify(saida)
 
     @app.post("/api/agendamentos")
     def agendar():
@@ -99,11 +125,9 @@ def create_app(db_path="agenda.db"):
         if not uid:
             return erro("Faça login para agendar.", 401)
         d = request.get_json(silent=True) or {}
-        dt, msg = data_valida(d.get("data"))
+        dt, msg = validar_slot(d.get("data"), d.get("hora"))
         if msg:
             return erro(msg)
-        if d.get("hora") not in models.HORARIOS:
-            return erro("Horário inválido.")
         if not models.servico_existe(db(), d.get("servico_id")):
             return erro("Serviço inválido.")
         try:
@@ -118,6 +142,23 @@ def create_app(db_path="agenda.db"):
         if not uid:
             return erro("Faça login.", 401)
         return jsonify(models.listar_agendamentos(db(), uid))
+
+    @app.put("/api/agendamentos/<int:ag_id>")
+    def remarcar(ag_id):
+        uid = session.get("uid")
+        if not uid:
+            return erro("Faça login.", 401)
+        d = request.get_json(silent=True) or {}
+        dt, msg = validar_slot(d.get("data"), d.get("hora"))
+        if msg:
+            return erro(msg)
+        try:
+            ok = models.remarcar_agendamento(db(), ag_id, uid, dt.isoformat(), d["hora"])
+        except sqlite3.IntegrityError:
+            return erro("Este horário já foi reservado.", 409)
+        if not ok:
+            return erro("Agendamento não encontrado.", 404)
+        return jsonify(ok=True)
 
     @app.delete("/api/agendamentos/<int:ag_id>")
     def cancelar(ag_id):

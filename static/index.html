@@ -8,7 +8,7 @@
 </head>
 <body>
   <header>
-    <h1>Agenda Fácil</h1>
+    <h1><span class="logo">✂</span> Agenda Fácil <small>Studio de beleza</small></h1>
     <nav id="nav" hidden><span id="saudacao"></span> <button id="sair">Sair</button></nav>
   </header>
   <main>
@@ -19,7 +19,7 @@
       <form id="form-auth">
         <label class="so-cadastro">Nome <input id="nome"></label>
         <label>E-mail <input id="email" type="email"></label>
-        <label class="so-cadastro">Telefone <input id="telefone"></label>
+        <label class="so-cadastro">Telefone (DDD + número, só números) <input id="telefone" inputmode="numeric" maxlength="11" placeholder="87999999999"></label>
         <label>Senha <input id="senha" type="password"></label>
         <button type="submit">Continuar</button>
       </form>
@@ -31,7 +31,9 @@
       <label>Serviço <select id="servico"></select></label>
       <label>Data <input id="data" type="date"></label>
       <div id="horarios"></div>
+      <p class="dica">Horários marcados como "ocupado" ou "passou" não estão disponíveis.</p>
       <button id="agendar">Confirmar agendamento</button>
+      <button id="desistir" hidden>Desistir da remarcação</button>
       <h2>Meus agendamentos</h2>
       <ul id="lista"></ul>
     </section>

@@ -16,7 +16,7 @@ def cli(tmp_path):
 
 
 def cadastrar(c, email="ana@exemplo.com"):
-    return c.post("/api/cadastro", json={"nome": "Ana", "email": email, "telefone": "8799999", "senha": "123456"})
+    return c.post("/api/cadastro", json={"nome": "Ana", "email": email, "telefone": "87999999999", "senha": "123456"})
 
 
 def amanha():
@@ -59,3 +59,30 @@ def test_data_passada(cli):
     ontem = (date.today() - timedelta(days=1)).isoformat()
     r = cli.post("/api/agendamentos", json={"servico_id": 1, "data": ontem, "hora": "09:00"})
     assert r.status_code == 400
+
+
+def test_telefone_com_letras(cli):
+    r = cli.post("/api/cadastro", json={"nome": "Ana", "email": "a@b.com", "telefone": "abc", "senha": "123456"})
+    assert r.status_code == 400
+
+
+def test_servicos_tem_preco(cli):
+    assert all("preco" in s for s in cli.get("/api/servicos").get_json())
+
+
+def test_remarcar(cli):
+    cadastrar(cli)
+    ag = cli.post("/api/agendamentos", json={"servico_id": 1, "data": amanha(), "hora": "09:00"}).get_json()["id"]
+    assert cli.put(f"/api/agendamentos/{ag}", json={"data": amanha(), "hora": "10:00"}).status_code == 200
+    assert cli.get("/api/agendamentos").get_json()[0]["hora"] == "10:00"
+    ontem = (date.today() - timedelta(days=1)).isoformat()
+    assert cli.put(f"/api/agendamentos/{ag}", json={"data": ontem, "hora": "10:00"}).status_code == 400
+
+
+def test_horario_que_ja_passou_hoje(cli, monkeypatch):
+    import app as appmod
+    from datetime import datetime
+    monkeypatch.setattr(appmod, "agora", lambda: datetime(2030, 1, 1, 15, 0, tzinfo=appmod.FUSO))
+    cadastrar(cli)
+    assert cli.post("/api/agendamentos", json={"servico_id": 1, "data": "2030-01-01", "hora": "09:00"}).status_code == 400
+    assert cli.post("/api/agendamentos", json={"servico_id": 1, "data": "2030-01-01", "hora": "16:00"}).status_code == 201

@@ -1,7 +1,10 @@
 // View (MVC): interface que consome a API Python.
 const $ = (id) => document.getElementById(id);
+const reais = (v) => "R$ " + Number(v).toFixed(2).replace(".", ",");
 let modoCadastro = false;
 let horaEscolhida = null;
+let remarcandoId = null;
+let timer = null;
 
 async function api(url, metodo = "GET", corpo) {
   const r = await fetch(url, {
@@ -14,15 +17,35 @@ async function api(url, metodo = "GET", corpo) {
   return dados;
 }
 
+// A mensagem some sozinha depois de alguns segundos.
 function aviso(texto, ok = false) {
+  clearTimeout(timer);
   $("msg").textContent = texto;
   $("msg").className = texto ? (ok ? "ok" : "erro") : "";
+  if (texto) timer = setTimeout(() => aviso(""), ok ? 4000 : 7000);
 }
 
 function alternarModo() {
   document.querySelectorAll(".so-cadastro").forEach((e) => (e.hidden = !modoCadastro));
   $("auth-titulo").textContent = modoCadastro ? "Criar conta" : "Entrar";
   $("alternar").textContent = modoCadastro ? "Já tem conta? Entrar" : "Não tem conta? Cadastre-se";
+}
+
+function sairRemarcacao() {
+  remarcandoId = null;
+  $("servico").disabled = false;
+  $("agendar").textContent = "Confirmar agendamento";
+  $("desistir").hidden = true;
+}
+
+function iniciarRemarcacao(a) {
+  remarcandoId = a.id;
+  $("servico").value = a.servico_id;
+  $("servico").disabled = true;
+  $("agendar").textContent = "Confirmar remarcação";
+  $("desistir").hidden = false;
+  aviso("Escolha a nova data e o novo horário.", true);
+  $("app").scrollIntoView({ behavior: "smooth" });
 }
 
 function mostrarApp(usuario) {
@@ -32,23 +55,29 @@ function mostrarApp(usuario) {
   if (usuario) {
     $("saudacao").textContent = "Olá, " + usuario.nome;
     carregarLista();
+  } else {
+    sairRemarcacao();
   }
 }
 
 async function carregarServicos() {
   const lista = await api("/api/servicos");
-  $("servico").replaceChildren(...lista.map((s) => new Option(`${s.nome} (${s.duracao} min)`, s.id)));
+  $("servico").replaceChildren(
+    ...lista.map((s) => new Option(`${s.nome} · ${s.duracao} min · ${reais(s.preco)}`, s.id))
+  );
 }
 
 async function carregarHorarios() {
   horaEscolhida = null;
   $("horarios").replaceChildren();
   if (!$("data").value) return;
+  const rotulo = { ocupado: " (ocupado)", passou: " (passou)" };
   try {
     const horas = await api("/api/horarios?data=" + $("data").value);
     horas.forEach((h) => {
       const b = document.createElement("button");
-      b.textContent = h.hora;
+      b.textContent = h.hora + (h.livre ? "" : rotulo[h.motivo] || "");
+      b.title = h.livre ? "" : "Horário indisponível";
       b.disabled = !h.livre;
       b.onclick = () => {
         horaEscolhida = h.hora;
@@ -67,19 +96,33 @@ async function carregarLista() {
     const [ano, mes, dia] = a.data.split("-");
     const span = document.createElement("span");
     span.textContent = `${dia}/${mes}/${ano} às ${a.hora} · ${a.servico}`;
-    const b = document.createElement("button");
-    b.textContent = "Cancelar";
-    b.onclick = async () => {
+    const rem = document.createElement("button");
+    rem.textContent = "Remarcar";
+    rem.className = "remarcar";
+    rem.onclick = () => iniciarRemarcacao(a);
+    const can = document.createElement("button");
+    can.textContent = "Cancelar";
+    can.onclick = async () => {
       if (!confirm("Cancelar este agendamento?")) return;
-      try { await api("/api/agendamentos/" + a.id, "DELETE"); aviso("Agendamento cancelado.", true); carregarLista(); carregarHorarios(); }
-      catch (e) { aviso(e.message); }
+      try {
+        await api("/api/agendamentos/" + a.id, "DELETE");
+        if (remarcandoId === a.id) sairRemarcacao();
+        aviso("Agendamento cancelado.", true);
+        carregarLista();
+        carregarHorarios();
+      } catch (e) { aviso(e.message); }
     };
-    li.append(span, b);
+    const acoes = document.createElement("div");
+    acoes.append(rem, can);
+    li.append(span, acoes);
     return li;
   }));
 }
 
 $("alternar").onclick = (e) => { e.preventDefault(); modoCadastro = !modoCadastro; alternarModo(); aviso(""); };
+
+// Telefone aceita somente números.
+$("telefone").oninput = () => { $("telefone").value = $("telefone").value.replace(/\D/g, "").slice(0, 11); };
 
 $("form-auth").onsubmit = async (e) => {
   e.preventDefault();
@@ -88,19 +131,33 @@ $("form-auth").onsubmit = async (e) => {
   try {
     const u = await api(modoCadastro ? "/api/cadastro" : "/api/login", "POST", corpo);
     aviso("");
+    $("form-auth").reset();
     mostrarApp(u);
   } catch (err) { aviso(err.message); }
 };
 
-$("sair").onclick = async () => { await api("/api/logout", "POST"); mostrarApp(null); };
+$("sair").onclick = async () => {
+  await api("/api/logout", "POST");
+  $("form-auth").reset();
+  $("lista").replaceChildren();
+  mostrarApp(null);
+};
 
 $("data").onchange = carregarHorarios;
+$("desistir").onclick = () => { sairRemarcacao(); aviso(""); };
 
 $("agendar").onclick = async () => {
   if (!$("data").value || !horaEscolhida) return aviso("Escolha a data e o horário.");
   try {
-    await api("/api/agendamentos", "POST", { servico_id: Number($("servico").value), data: $("data").value, hora: horaEscolhida });
-    aviso("Agendamento confirmado!", true);
+    if (remarcandoId) {
+      await api("/api/agendamentos/" + remarcandoId, "PUT", { data: $("data").value, hora: horaEscolhida });
+      sairRemarcacao();
+      aviso("Agendamento remarcado!", true);
+    } else {
+      await api("/api/agendamentos", "POST",
+        { servico_id: Number($("servico").value), data: $("data").value, hora: horaEscolhida });
+      aviso("Agendamento confirmado!", true);
+    }
     carregarLista();
     carregarHorarios();
   } catch (err) { aviso(err.message); carregarHorarios(); }
@@ -108,7 +165,9 @@ $("agendar").onclick = async () => {
 
 (async () => {
   alternarModo();
-  $("data").min = new Date().toISOString().slice(0, 10);
+  const hoje = new Date();
+  hoje.setMinutes(hoje.getMinutes() - hoje.getTimezoneOffset());  // data local, não UTC
+  $("data").min = hoje.toISOString().slice(0, 10);
   await carregarServicos();
   try { mostrarApp(await api("/api/me")); } catch { mostrarApp(null); }
 })();

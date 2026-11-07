@@ -18,3 +18,11 @@ ul { padding: 0; list-style: none; }
 li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
 li button { background: #b91c1c; }
 header button { background: #115e59; }
+.logo { font-size: 1.4rem; margin-right: 4px; }
+h1 small { font-weight: 400; font-size: .75rem; opacity: .85; margin-left: 6px; }
+#horarios button { min-width: 100px; min-height: 46px; font-size: 1rem; }
+#horarios button:disabled { background: #e5e7eb; color: #6b7280; }
+.dica { font-size: .8rem; color: #555; margin: 0 0 10px; }
+li > div { display: flex; gap: 6px; }
+li button.remarcar { background: #0369a1; }
+#desistir { background: #6b7280; margin-left: 6px; }
